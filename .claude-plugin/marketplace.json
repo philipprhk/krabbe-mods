@@ -1,0 +1,21 @@
+{
+  "name": "krabbe-mods",
+  "owner": {
+    "name": "philipprhk"
+  },
+  "plugins": [
+    {
+      "name": "fertig-krabbe",
+      "source": "./fertig-krabbe",
+      "description": "Ton und winkende Claude-Krabbe unten rechts, sobald Claude fertig ist; pro Chat stumm schaltbar."
+    },
+    {
+      "name": "skills-sammlung",
+      "source": "./skills-sammlung",
+      "description": "Knöpfe „Skills“, „Sitzung beenden“ und die Krabben-Glocke über dem Eingabefeld; /skill-sammlung zeigt alle Skills nach Bereich oder Herausgeber."
+    }
+  ],
+  "metadata": {
+    "description": "Fertig-Krabbe und Skills-Sammlung für Claude Code"
+  }
+}

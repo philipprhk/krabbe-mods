@@ -1,0 +1,6 @@
+{
+  "name": "skills-sammlung",
+  "version": "0.3.0",
+  "description": "Knöpfe „Skills“, „Sitzung beenden“ und die Krabben-Glocke (nur dieser Chat) über dem Eingabefeld und /skill-sammlung: alle installierten Skills nach Herausgeber oder Bereich, ein Klick setzt den Befehl ins Eingabefeld.",
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "fertig-krabbe",
+  "version": "0.6.0",
+  "description": "Ton und winkende Claude-Krabbe unten rechts aus der Taskleiste, sobald Claude fertig ist; mit eigenem Ton und Kopfneigen bei Rückfragen und Freigaben, alle 5 Minuten erneut, bis du antwortest. Pro Chat stumm schaltbar: Glocken-Knopf in der Skills-Leiste oder /krabbe hier-aus."
+}
