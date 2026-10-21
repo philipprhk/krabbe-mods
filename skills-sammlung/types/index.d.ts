@@ -19,6 +19,8 @@ declare module 'claude-code' {
       liste: Skill[]
       // Zählt Änderungen an den Krabbe-Einstellungen hoch, damit der Glocken-Knopf neu gezeichnet wird.
       krabbeStand: number
+      // Gruppen, die laut eigener Datei des Nutzers zuerst kommen.
+      vorne: string[]
     }
   }
 }

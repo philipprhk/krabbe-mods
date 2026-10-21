@@ -11,6 +11,9 @@ import {
   modusHier,
   modusSetzen,
   schreiben,
+  SYMBOL,
+  TOAST,
+  umschalten,
   zustandHier,
 } from './einstellungen'
 
@@ -40,6 +43,38 @@ const aendern = async ($: Api, wie: (e: Einstellungen) => Einstellungen) => {
   await schreiben($, neu)
 
   return neu
+}
+
+// Eigene Glocke über dem Eingabefeld, nur wenn der Mod skills-sammlung fehlt (der zeigt sie sonst in seiner Leiste).
+const STAND = { plugin: 'fertig-krabbe', key: 'stand' } as const
+
+const neuZeichnen = async ($: Api) => {
+  try {
+    const { value = 0 } = await $.state.get(STAND)
+    await $.state.set(STAND, value + 1)
+  } catch (fehler) {
+    $.ui.log(`fertig-krabbe: Glocke nicht neu gezeichnet: ${String(fehler)}`, { to: 'debug' })
+  }
+}
+
+const mitSkillsSammlung = async ($: Api) => {
+  try {
+    return (await $.command.list()).some(b => b.name.slice(b.name.lastIndexOf(':') + 1) === 'skill-sammlung')
+  } catch {
+    return false
+  }
+}
+
+const glockeUmschalten = async ($: Api) => {
+  try {
+    const id = await $.session.id()
+    const neu = await aendern($, alt => umschalten(alt, id))
+    if (zustandHier(neu, id) === 'stumm' || zustandHier(neu, id) === 'ueberall-aus') erinnerungStoppen()
+    await neuZeichnen($)
+    $.ui.toast(TOAST[zustandHier(neu, id)])
+  } catch (fehler) {
+    $.ui.toast(`Krabbe ließ sich nicht umschalten: ${String(fehler)}`)
+  }
 }
 
 const modusHierJetzt = async ($: Api): Promise<Modus> => modusHier(await laden($), await $.session.id())
@@ -159,11 +194,31 @@ export const register: Register = on => {
   // Du schreibst etwas: Die Rückfrage gilt als beantwortet.
   on('prompt.submit', async ($, e, next) => {
     erinnerungStoppen()
+    await neuZeichnen($)
 
     return next(e)
   })
 
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const darunter = await next(e)
+    if (e.props.hasSurvey || (await mitSkillsSammlung($))) return darunter
+    const { Box, Button } = $.ui.resolve(e)
+    await $.state.get(STAND)
+    const glocke = SYMBOL[zustandHier(await lesen($), await $.session.id())]
+
+    return (
+      <Box flexDirection="column">
+        {darunter}
+        <Box flexDirection="row">
+          <Button key="krabbe-glocke" label={glocke} variant="secondary" onPress={() => glockeUmschalten($)} />
+        </Box>
+      </Box>
+    )
+  })
+
   on('command.run', { command: 'krabbe' }, async ($, e) => {
+    await neuZeichnen($)
+
     const wunsch = (e.args ?? '').trim().toLowerCase().replace(/\s+/g, '-')
     const id = await $.session.id()
 

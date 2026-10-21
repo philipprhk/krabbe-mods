@@ -1,7 +1,7 @@
 import type { CommandInfo, Hook, Register } from 'claude-code'
 
 import type { Ansicht, Skill } from '../types'
-import { BEREICHE, HERAUSGEBER, KATALOG, REIHENFOLGE_BEREICHE, REIHENFOLGE_HERAUSGEBER } from './katalog'
+import { bereichNachRegel, type Eintrag, HERAUSGEBER, KATALOG, REIHENFOLGE_BEREICHE, REIHENFOLGE_HERAUSGEBER } from './katalog'
 import { lesen, schreiben, SYMBOL, TOAST, umschalten, zustandHier } from './krabbe-einstellungen'
 
 type Api = Parameters<Hook<'session.start'>>[0]
@@ -13,6 +13,7 @@ const OFFEN = { plugin: 'skills-sammlung', key: 'offen' } as const
 const SUCHE = { plugin: 'skills-sammlung', key: 'suche' } as const
 const LISTE = { plugin: 'skills-sammlung', key: 'liste' } as const
 const KRABBE_STAND = { plugin: 'skills-sammlung', key: 'krabbeStand' } as const
+const VORNE = { plugin: 'skills-sammlung', key: 'vorne' } as const
 
 // Die Krabbe-Einstellungen haben sich geändert (Knopf, /krabbe, neuer Chat): Glocke neu zeichnen.
 const krabbeNeuZeichnen = async ($: Api) => {
@@ -49,19 +50,52 @@ export const kurzBeschreibung = (text: string) => {
   return satz.length > 140 ? `${satz.slice(0, 137).trimEnd()}…` : satz
 }
 
-const ausKatalog = (): Skill[] =>
-  [...KATALOG].map(([kurz, e]) => ({ name: kurz, kurz, beschreibung: '', ...e }))
+// Eigene Zuordnungen des Nutzers, aus %USERPROFILE%\.claude\mods-daten\skills-katalog.json (optional):
+// { "skills": { "<skill>": { "herausgeber": "…", "bereich": "…" } }, "reihenfolge": ["Gruppe, die zuerst kommt", …] }
+export type EigenerKatalog = { skills: Record<string, Partial<Eintrag>>; reihenfolge: string[] }
 
-// Macht aus der Befehlsliste der Sitzung die Skill-Liste. Ohne Liste gilt der Katalog.
-export const skillsAus = (befehle: readonly CommandInfo[]): Skill[] => {
+const OHNE_EIGENE: EigenerKatalog = { skills: {}, reihenfolge: [] }
+
+export const eigenerKatalogAus = (roh: unknown): EigenerKatalog => {
+  const o = typeof roh === 'object' && roh !== null ? (roh as Record<string, unknown>) : {}
+  const skills: Record<string, Partial<Eintrag>> = {}
+  if (typeof o.skills === 'object' && o.skills !== null) {
+    for (const [name, wert] of Object.entries(o.skills as Record<string, unknown>)) {
+      const w = typeof wert === 'object' && wert !== null ? (wert as Record<string, unknown>) : {}
+      skills[name] = {
+        ...(typeof w.herausgeber === 'string' ? { herausgeber: w.herausgeber } : {}),
+        ...(typeof w.bereich === 'string' ? { bereich: w.bereich } : {}),
+      }
+    }
+  }
+  const reihenfolge = Array.isArray(o.reihenfolge) ? o.reihenfolge.filter((g): g is string => typeof g === 'string') : []
+
+  return { skills, reihenfolge }
+}
+
+async function eigenerKatalog($: Api): Promise<EigenerKatalog> {
+  try {
+    const heim = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''
+    const pfad = `${heim.replace(/[\\/]+$/, '')}\\.claude\\mods-daten\\skills-katalog.json`
+
+    return eigenerKatalogAus(JSON.parse(await $.fs.read(pfad)))
+  } catch {
+    return OHNE_EIGENE
+  }
+}
+
+// Macht aus der Befehlsliste der Sitzung die Skill-Liste, nur mit dem, was wirklich installiert ist.
+// Zuordnung in dieser Reihenfolge: eigene Datei des Nutzers, mitgelieferter Katalog, Stichwort-Regeln.
+export const skillsAus = (befehle: readonly CommandInfo[], eigene: EigenerKatalog = OHNE_EIGENE): Skill[] => {
   const gesehen = new Set<string>()
   const ergebnis: Skill[] = []
 
   for (const b of befehle) {
     const kurz = grundname(b.name)
+    const mein = eigene.skills[kurz] ?? eigene.skills[b.name]
     const eintrag = KATALOG.get(kurz)
-    const istSkill = eintrag !== undefined || b.source === 'plugin' || b.source === 'user'
-    if (!istSkill || KEINE_SKILLS.has(b.name) || gesehen.has(kurz)) continue
+    const istSkill = mein !== undefined || eintrag !== undefined || b.source === 'plugin' || b.source === 'user'
+    if (!istSkill || KEINE_SKILLS.has(kurz) || gesehen.has(kurz)) continue
     gesehen.add(kurz)
 
     const vorsatz = b.name.includes(':') ? b.name.slice(0, b.name.indexOf(':')) : undefined
@@ -70,13 +104,14 @@ export const skillsAus = (befehle: readonly CommandInfo[]): Skill[] => {
       kurz,
       beschreibung: kurzBeschreibung(b.description),
       herausgeber:
+        mein?.herausgeber ??
         eintrag?.herausgeber ??
         (b.source === 'user' ? HERAUSGEBER.eigene : (b.plugin ?? vorsatz ?? HERAUSGEBER.unbekannt)),
-      bereich: eintrag?.bereich ?? BEREICHE.sonstiges,
+      bereich: mein?.bereich ?? eintrag?.bereich ?? bereichNachRegel(kurz, b.description),
     })
   }
 
-  return ergebnis.length > 0 ? ergebnis : ausKatalog()
+  return ergebnis
 }
 
 const laden = async ($: Api) => {
@@ -86,8 +121,18 @@ const laden = async ($: Api) => {
   } catch (fehler) {
     $.ui.log(`skills-sammlung: Befehlsliste nicht lesbar: ${String(fehler)}`, { to: 'debug' })
   }
-  const skills = skillsAus(befehle)
-  await $.state.set(LISTE, skills)
+  const eigene = await eigenerKatalog($)
+  await $.state.set(LISTE, skillsAus(befehle, eigene))
+  await $.state.set(VORNE, eigene.reihenfolge)
+}
+
+// Welche Befehle es gibt: Knöpfe erscheinen nur, wenn ihr Gegenstück installiert ist.
+const befehlsnamenVoll = async ($: Api): Promise<string[]> => {
+  try {
+    return (await $.command.list()).map(b => b.name)
+  } catch {
+    return []
+  }
 }
 
 const oeffnen = async ($: Api) => {
@@ -105,13 +150,14 @@ const einsetzen = async ($: Api, skill: Skill) => {
 }
 
 // Setzt den Befehl nur ins Eingabefeld: Enter ist die Bestätigung, ein Fehlklick beendet nichts.
-const beenden = async ($: Api) => {
-  const { isFilled } = await $.prompt.fill({ text: '/sitzung-beenden ' })
-  if (!isFilled) $.ui.toast('/sitzung-beenden ließ sich nicht ins Eingabefeld setzen')
+// Der Knopf erscheint nur, wenn es einen Skill „sitzung-beenden“ gibt (ggf. mit Plugin-Vorsatz).
+const beenden = async ($: Api, befehl: string) => {
+  const { isFilled } = await $.prompt.fill({ text: `/${befehl} ` })
+  if (!isFilled) $.ui.toast(`/${befehl} ließ sich nicht ins Eingabefeld setzen`)
 }
 
 // Gruppiert nach der gewählten Ansicht, in fester Reihenfolge; unbekannte Gruppen ans Ende.
-export const gruppieren = (skills: readonly Skill[], wie: Ansicht, filter: string) => {
+export const gruppieren = (skills: readonly Skill[], wie: Ansicht, filter: string, vorne: readonly string[] = []) => {
   const f = filter.trim().toLowerCase()
   const passend =
     f === ''
@@ -119,7 +165,8 @@ export const gruppieren = (skills: readonly Skill[], wie: Ansicht, filter: strin
       : skills.filter(s =>
           [s.name, s.beschreibung, s.herausgeber, s.bereich].some(t => t.toLowerCase().includes(f)),
         )
-  const reihenfolge = wie === 'herausgeber' ? REIHENFOLGE_HERAUSGEBER : REIHENFOLGE_BEREICHE
+  // Gruppen aus der eigenen Datei des Nutzers zuerst, dann die feste Reihenfolge.
+  const reihenfolge = [...vorne, ...(wie === 'herausgeber' ? REIHENFOLGE_HERAUSGEBER : REIHENFOLGE_BEREICHE)]
   const gruppen = new Map<string, Skill[]>()
   for (const s of passend) {
     const g = wie === 'herausgeber' ? s.herausgeber : s.bereich
@@ -181,15 +228,27 @@ export const register: Register = on => {
     const { Box, Button } = $.ui.resolve(e)
     // Liest den Zähler, damit eine Änderung neu zeichnet; der Zustand selbst kommt aus der Datei.
     await $.state.get(KRABBE_STAND)
-    const glocke = SYMBOL[zustandHier(await lesen($), await $.session.id())]
+    const befehle = await befehlsnamenVoll($)
+    const beendenBefehl = befehle.find(n => grundname(n) === 'sitzung-beenden')
+    const mitKrabbe = befehle.some(n => grundname(n) === 'krabbe')
+    const glocke = mitKrabbe ? SYMBOL[zustandHier(await lesen($), await $.session.id())] : undefined
 
     return (
       <Box flexDirection="column">
         {darunter}
         <Box flexDirection="row" gap={1}>
           <Button key="skills-oeffnen" label="🧩 Skills" variant="secondary" onPress={() => oeffnen($)} />
-          <Button key="sitzung-beenden" label="🏁 Sitzung beenden" variant="secondary" onPress={() => beenden($)} />
-          <Button key="krabbe-hier" label={glocke} variant="secondary" onPress={() => krabbeUmschalten($)} />
+          {beendenBefehl !== undefined && (
+            <Button
+              key="sitzung-beenden"
+              label="🏁 Sitzung beenden"
+              variant="secondary"
+              onPress={() => beenden($, beendenBefehl)}
+            />
+          )}
+          {glocke !== undefined && (
+            <Button key="krabbe-hier" label={glocke} variant="secondary" onPress={() => krabbeUmschalten($)} />
+          )}
         </Box>
       </Box>
     )
@@ -201,7 +260,8 @@ export const register: Register = on => {
     const filter = (await $.state.get(SUCHE)).value ?? ''
     const auf = new Set((await $.state.get(OFFEN)).value ?? [])
     const skills = (await $.state.get(LISTE)).value ?? []
-    const gruppen = gruppieren(skills, wie, filter)
+    const vorne = (await $.state.get(VORNE)).value ?? []
+    const gruppen = gruppieren(skills, wie, filter, vorne)
     const alleAuf = filter.trim() !== ''
     const umschalten = async (g: string) => {
       const l = (await $.state.get(OFFEN)).value ?? []

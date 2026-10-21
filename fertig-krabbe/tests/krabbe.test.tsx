@@ -13,7 +13,13 @@ const DATEI = 'C:/Users/T/.claude/mods-daten/fertig-krabbe.json'
 const pfad = (p: string) => p.replace(/\\/g, '/')
 
 // Steht für die Engine: merkt sich jeden Programmstart, statt ihn auszuführen; Dateien liegen im Speicher.
-const engine = (on: On, starts: string[][], chat = { id: 'chat-1' }, dateien = new Map<string, string>()) => {
+const engine = (
+  on: On,
+  starts: string[][],
+  chat = { id: 'chat-1' },
+  dateien = new Map<string, string>(),
+  befehle: string[] = ['krabbe'],
+) => {
   on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? 'C:\\Users\\T' : undefined }))
   on('fs.exists', ($, e) => ({ value: dateien.has(pfad(e.path)) }))
   on('fs.read', ($, e) => {
@@ -28,6 +34,7 @@ const engine = (on: On, starts: string[][], chat = { id: 'chat-1' }, dateien = n
     return { value: undefined }
   })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.list', () => ({ value: befehle.map(name => ({ name, source: 'plugin', description: '' })) }))
   on('session.id', () => ({ value: chat.id }))
   on('session.cwd', () => ({ value: 'C:\\Projekte\\Beispiel' }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -35,6 +42,11 @@ const engine = (on: On, starts: string[][], chat = { id: 'chat-1' }, dateien = n
   on('tool.call', () => ({ result: { answers: {} } }))
   on('classic.PermissionRequest', () => ({}))
   on('prompt.submit', ($, e) => ({ text: e.text }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>andere Leiste</Text>
+  })
   on('process.run', ($, e) => {
     starts.push([...e.argv])
 
@@ -276,4 +288,42 @@ test('überall aus, nur dieser Chat an: hier kommt die Krabbe mit Ton, anderswo 
   await $.command.run({ command: 'krabbe', args: 'aus' })
   await $.turn.complete(FERTIG)
   expect(starts.length).toBe(1)
+})
+
+const LEISTE = {
+  plugin: 'fertig-krabbe',
+  component: 'AbovePrompt',
+  surface: 'desktop',
+  props: { hasSurvey: false, isWorking: false, rows: 40 },
+} as const
+
+test('ohne Skills-Sammlung zeigt die Krabbe ihre eigene Glocke und schaltet damit', async ($, on) => {
+  const starts: string[][] = []
+  engine(on, starts)
+  mock.store(on)
+
+  const ui = await $.ui.mount(LEISTE as never)
+  expect((await ui.find({ type: 'Text', text: /andere Leiste/ }))?.text).toBe('andere Leiste')
+  expect((await ui.find({ key: 'krabbe-glocke' }))?.props.label).toBe('🔔')
+  await ui.press({ key: 'krabbe-glocke' })
+  expect((await ui.find({ key: 'krabbe-glocke' }))?.props.label).toBe('🔕')
+  await $.turn.complete(FERTIG)
+  expect(starts.length).toBe(0)
+
+  await $.command.run({ command: 'krabbe', args: 'aus' })
+  expect((await ui.find({ key: 'krabbe-glocke' }))?.props.label).toBe('🔕 all')
+  await ui.press({ key: 'krabbe-glocke' })
+  expect((await ui.find({ key: 'krabbe-glocke' }))?.props.label).toBe('🔔 (🔕 all)')
+  await ui.unmount()
+})
+
+test('mit Skills-Sammlung keine eigene Glocke (die sitzt dann dort)', async ($, on) => {
+  const starts: string[][] = []
+  engine(on, starts, { id: 'chat-1' }, new Map(), ['krabbe', 'skill-sammlung'])
+  mock.store(on)
+
+  const ui = await $.ui.mount(LEISTE as never)
+  expect(await ui.find({ key: 'krabbe-glocke' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /andere Leiste/ }))?.text).toBe('andere Leiste')
+  await ui.unmount()
 })

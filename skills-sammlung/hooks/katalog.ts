@@ -110,11 +110,6 @@ const eintraege: [string, H, B][] = [
   ['critique-color', 'owl', 'design'],
   ['critique-brand-consistency', 'owl', 'design'],
 
-  // Lokal installiert, ohne Herausgeber in den Dateien
-  ['find-skills', 'unbekannt', 'claude'],
-  ['brandkit', 'unbekannt', 'marke'],
-  ['ponytail', 'unbekannt', 'design'],
-
   // ClaudeKit (author: claudekit)
   ['banner-design', 'claudekit', 'marke'],
   ['brand', 'claudekit', 'marke'],
@@ -209,9 +204,6 @@ const eintraege: [string, H, B][] = [
   ['ig-repurpose', 'instagram', 'marke'],
   ['ig-story', 'instagram', 'marke'],
   ['ig-viral', 'instagram', 'marke'],
-
-  // img2-Plugins (über den img2-Plugin-Manager, verlinkt aus ~/.img2/plugins)
-  ['img2-character', 'img2threejs', 'dreid'],
 ]
 
 export type Eintrag = { herausgeber: string; bereich: string }
@@ -223,3 +215,45 @@ export const KATALOG: ReadonlyMap<string, Eintrag> = new Map(
 // Reihenfolge der Gruppen im Fenster: eigene und häufig genutzte zuerst.
 export const REIHENFOLGE_HERAUSGEBER: readonly string[] = Object.values(HERAUSGEBER)
 export const REIHENFOLGE_BEREICHE: readonly string[] = Object.values(BEREICHE)
+
+// Regel für alles, was weder die eigene Datei des Nutzers noch der Katalog kennt: Stichwörter in Name und
+// Beschreibung. Ein Treffer im Namen zählt dreifach; bei Gleichstand gewinnt der Bereich, der hier weiter oben steht.
+const STICHWOERTER: [B, string[]][] = [
+  ['recht', ['legal', 'contract', 'vertrag', 'nda', 'terms', 'gdpr', 'dsgvo', 'compliance', 'recht', 'clause', 'klausel']],
+  ['dreid', ['3d', 'three', 'webgl', 'blender', 'shader', 'mesh']],
+  ['animation', ['animat', 'motion', 'gsap', 'transition', 'spring', 'keyframe', 'remotion']],
+  ['texte', ['pdf', 'docx', 'xlsx', 'pptx', 'document', 'dokument', 'writing', 'schreib', 'slides', 'spreadsheet', 'word', 'excel']],
+  ['marke', ['marketing', 'brand', 'marke', 'instagram', 'social', 'tiktok', 'ads', 'banner', 'campaign', 'kampagne', 'seo', 'werbung']],
+  ['browser', ['browser', 'chrome', 'computer-use', 'computer use', 'click', 'screenshot']],
+  ['recherche', ['research', 'recherche', 'video', 'youtube', 'search', 'analytics', 'transcript']],
+  ['claude', ['claude', 'plugin', 'memory', 'mcp', 'hook', 'agent', 'prompt']],
+  ['code', ['code', 'review', 'test', 'debug', 'api', 'git', 'refactor', 'swift', 'typescript', 'python']],
+  ['design', ['design', 'ui', 'ux', 'css', 'frontend', 'layout', 'typograph', 'color', 'colour', 'landing', 'interface']],
+]
+
+const treffer = (text: string, wort: string) => {
+  // Kurze Wörter nur als ganzes Wort, damit „ui“ nicht in „build“ trifft.
+  // Längere zählen am Wortanfang, damit „test“ nicht in „latest“ und „code“ nicht in „barcode“ trifft.
+  const muster =
+    wort.length <= 3
+      ? new RegExp(`(^|[^a-z0-9])${wort}([^a-z0-9]|$)`)
+      : new RegExp(`(^|[^a-z0-9])${wort.replace(/[-]/g, '[- ]')}`)
+
+  return muster.test(text)
+}
+
+export const bereichNachRegel = (name: string, beschreibung: string): string => {
+  const n = name.toLowerCase()
+  const b = beschreibung.toLowerCase()
+  let bester: B = 'sonstiges'
+  let punkte = 0
+  for (const [bereich, woerter] of STICHWOERTER) {
+    const p = woerter.reduce((summe, w) => summe + (treffer(n, w) ? 3 : 0) + (treffer(b, w) ? 1 : 0), 0)
+    if (p > punkte) {
+      bester = bereich
+      punkte = p
+    }
+  }
+
+  return BEREICHE[bester]
+}

@@ -12,7 +12,10 @@ const LEISTE = {
 } as const
 
 // Steht für die Engine; die Krabbe-Einstellungen liegen im Speicher statt auf der Platte.
-const engine = (on: On, dateien: Map<string, string>, chat = { id: 'chat-1' }) => {
+const ALLE = ['krabbe', 'sitzung-beenden', 'skill-sammlung']
+
+const engine = (on: On, dateien: Map<string, string>, chat = { id: 'chat-1' }, befehle: string[] = ALLE) => {
+  on('command.list', () => ({ value: befehle.map(name => ({ name, source: 'plugin', description: '' })) }))
   on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? 'C:\\Users\\T' : undefined }))
   on('fs.read', ($, e) => {
     const text = dateien.get(pfad(e.path))
@@ -121,5 +124,15 @@ test('Ausnahme bei „überall aus“ wieder weg: kein Stumm-Eintrag bleibt hän
   await ui.press({ key: 'krabbe-hier' })
   expect(await glocke(ui)).toBe('🔕 all')
   expect(JSON.parse(dateien.get(DATEI) ?? '{}')).toEqual({ modus: 'aus', stumm: [], an: [] })
+  await ui.unmount()
+})
+
+test('ohne Krabbe-Mod keine Glocke, ohne Skill „sitzung-beenden“ kein Beenden-Knopf', async ($, on) => {
+  engine(on, new Map(), { id: 'chat-1' }, ['skill-sammlung'])
+
+  const ui = await $.ui.mount(LEISTE as never)
+  expect(await ui.find({ key: 'krabbe-hier' })).toBeUndefined()
+  expect(await ui.find({ key: 'sitzung-beenden' })).toBeUndefined()
+  expect(await ui.find({ key: 'skills-oeffnen' })).toBeDefined()
   await ui.unmount()
 })
