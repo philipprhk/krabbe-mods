@@ -127,12 +127,32 @@ test('Ausnahme bei „überall aus“ wieder weg: kein Stumm-Eintrag bleibt hän
   await ui.unmount()
 })
 
-test('ohne Krabbe-Mod keine Glocke, ohne Skill „sitzung-beenden“ kein Beenden-Knopf', async ($, on) => {
+test('mit /agenten-radar steht „Radar“ rechts neben der Glocke und öffnet das Panel per Befehl', async ($, on) => {
+  const gelaufen: string[] = []
+  // Vor engine(), sonst beantwortet deren allgemeiner command.run-Hook den Aufruf zuerst.
+  on('command.run', { command: 'agenten-radar' }, ($, e) => {
+    gelaufen.push(e.command)
+
+    return { text: 'geöffnet' }
+  })
+  engine(on, new Map(), { id: 'chat-1' }, [...ALLE, 'agenten-radar'])
+
+  const ui = await $.ui.mount(LEISTE as never)
+  const tasten = (await ui.findAll({ type: 'Button' })).map(b => b.key)
+  expect(tasten.slice(-4)).toEqual(['skills-oeffnen', 'sitzung-beenden', 'krabbe-hier', 'agenten-radar'])
+  expect((await ui.find({ key: 'agenten-radar' }))?.props.label).toBe('📡 Radar')
+  await ui.press({ key: 'agenten-radar' })
+  expect(gelaufen).toEqual(['agenten-radar'])
+  await ui.unmount()
+})
+
+test('ohne Krabbe-Mod keine Glocke, ohne Skill „sitzung-beenden“ kein Beenden-Knopf, ohne Radar kein Radar-Knopf', async ($, on) => {
   engine(on, new Map(), { id: 'chat-1' }, ['skill-sammlung'])
 
   const ui = await $.ui.mount(LEISTE as never)
   expect(await ui.find({ key: 'krabbe-hier' })).toBeUndefined()
   expect(await ui.find({ key: 'sitzung-beenden' })).toBeUndefined()
+  expect(await ui.find({ key: 'agenten-radar' })).toBeUndefined()
   expect(await ui.find({ key: 'skills-oeffnen' })).toBeDefined()
   await ui.unmount()
 })

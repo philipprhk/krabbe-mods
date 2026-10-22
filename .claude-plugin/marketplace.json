@@ -12,7 +12,7 @@
     {
       "name": "skills-sammlung",
       "source": "./skills-sammlung",
-      "description": "Knöpfe „Skills“, „Sitzung beenden“ und die Krabben-Glocke über dem Eingabefeld; /skill-sammlung zeigt alle Skills nach Bereich oder Herausgeber."
+      "description": "Knöpfe „Skills“, „Sitzung beenden“, die Krabben-Glocke und „Radar“ über dem Eingabefeld; /skill-sammlung zeigt alle Skills nach Bereich oder Herausgeber."
     }
   ],
   "metadata": {

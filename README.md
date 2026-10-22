@@ -21,7 +21,7 @@ Einstellungen: `%USERPROFILE%\.claude\mods-daten\fertig-krabbe.json`.
 
 ## skills-sammlung
 
-Leiste über dem Eingabefeld mit „🧩 Skills“: ein Fenster mit allen **bei dir installierten** Skills, nach Bereich oder Herausgeber; ein Klick setzt den Befehl ins Eingabefeld. Außerdem, nur wenn vorhanden: „🏁 Sitzung beenden“ (wenn es einen Skill `sitzung-beenden` gibt) und die Krabben-Glocke (wenn `fertig-krabbe` installiert ist).
+Leiste über dem Eingabefeld mit „🧩 Skills“: ein Fenster mit allen **bei dir installierten** Skills, nach Bereich oder Herausgeber; ein Klick setzt den Befehl ins Eingabefeld. Außerdem, nur wenn vorhanden: „🏁 Sitzung beenden“ (wenn es einen Skill `sitzung-beenden` gibt), die Krabben-Glocke (wenn `fertig-krabbe` installiert ist) und „📡 Radar“, das das Panel `/agenten-radar` öffnet (wenn ein Mod den Befehl `/agenten-radar` anbietet; der Mod ist nicht Teil dieses Repos).
 
 So werden Skills einsortiert, in dieser Reihenfolge:
 

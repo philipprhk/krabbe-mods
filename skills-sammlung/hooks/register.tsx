@@ -156,6 +156,15 @@ const beenden = async ($: Api, befehl: string) => {
   if (!isFilled) $.ui.toast(`/${befehl} ließ sich nicht ins Eingabefeld setzen`)
 }
 
+// Öffnet das Panel des Mods agenten-radar direkt; der Knopf erscheint nur, wenn es /agenten-radar gibt.
+const radarOeffnen = async ($: Api, befehl: string) => {
+  try {
+    await $.command.run({ command: befehl })
+  } catch {
+    $.ui.toast(`/${befehl} ließ sich nicht ausführen`)
+  }
+}
+
 // Gruppiert nach der gewählten Ansicht, in fester Reihenfolge; unbekannte Gruppen ans Ende.
 export const gruppieren = (skills: readonly Skill[], wie: Ansicht, filter: string, vorne: readonly string[] = []) => {
   const f = filter.trim().toLowerCase()
@@ -231,6 +240,7 @@ export const register: Register = on => {
     const befehle = await befehlsnamenVoll($)
     const beendenBefehl = befehle.find(n => grundname(n) === 'sitzung-beenden')
     const mitKrabbe = befehle.some(n => grundname(n) === 'krabbe')
+    const radarBefehl = befehle.find(n => grundname(n) === 'agenten-radar')
     const glocke = mitKrabbe ? SYMBOL[zustandHier(await lesen($), await $.session.id())] : undefined
 
     return (
@@ -248,6 +258,9 @@ export const register: Register = on => {
           )}
           {glocke !== undefined && (
             <Button key="krabbe-hier" label={glocke} variant="secondary" onPress={() => krabbeUmschalten($)} />
+          )}
+          {radarBefehl !== undefined && (
+            <Button key="agenten-radar" label="📡 Radar" variant="secondary" onPress={() => radarOeffnen($, radarBefehl)} />
           )}
         </Box>
       </Box>
