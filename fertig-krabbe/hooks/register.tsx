@@ -128,6 +128,27 @@ const rueckfrage = async ($: Api, worauf: string) => {
   await zeigen
 }
 
+// Hintergrundarbeit, die die Sitzung von selbst wieder weckt. Shells und Monitore wecken zwar auch, zählen aber
+// nicht: sie können ewig laufen (ein Dev-Server), dann käme die Krabbe nie mehr. Wartet Claude auf einen Build im
+// Hintergrund, kommt sie also weiterhin schon in der Pause.
+const WECKT_NICHT = ['shell', 'monitor']
+const AKTIV = ['pending', 'running', 'waiting']
+
+// Was der Stop-Hook dieses Durchgangs über laufende Hintergrundarbeit gemeldet hat (zurückgesetzt bei turn.start).
+let wartetAufHintergrund = false
+
+// Laufen noch Hintergrund-Agenten, ist Claude nur in der Pause und macht gleich von selbst weiter.
+// Teammates zählen nicht: einer in einem geschlossenen Pane bleibt für immer „running“ stehen.
+const agentenLaufen = async ($: Api) => {
+  try {
+    return (await $.agent.list()).some(a => a.teammateId === undefined && AKTIV.includes(a.status))
+  } catch (fehler) {
+    $.ui.log(`fertig-krabbe: Agentenliste nicht lesbar: ${String(fehler)}`, { to: 'debug' })
+
+    return false
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
@@ -145,12 +166,30 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Nur wenn die Hauptsitzung fertig ist: keine Subagenten, nicht nach einem Abbruch durch dich.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) wartetAufHintergrund = false
+
+    return next(e)
+  })
+
+  // Der Stop-Hook kommt vor dem Ende des Durchgangs und sagt, ob noch Hintergrundarbeit läuft.
+  on('classic.Stop', async ($, e, next) => {
+    const ergebnis = await next(e)
+    wartetAufHintergrund =
+      ergebnis.block !== undefined || (e.background_tasks ?? []).some(t => !WECKT_NICHT.includes(t.type))
+
+    return ergebnis
+  })
+
+  // Nur wenn die Hauptsitzung fertig ist: keine Subagenten, nicht nach einem Abbruch durch dich,
+  // nicht in der Pause, in der Claude auf Hintergrund-Agenten wartet (deren Ende weckt einen neuen Durchgang).
   on('turn.complete', async ($, e, next) => {
     const ergebnis = await next(e)
     if (e.agentId === undefined) {
       erinnerungStoppen()
-      if (!e.isAborted) {
+      const pause = wartetAufHintergrund || (await agentenLaufen($))
+      wartetAufHintergrund = false
+      if (!e.isAborted && !pause) {
         if (endetMitFrage(e.answer)) await rueckfrage($, 'antwort')
         else await winken($, await modusHierJetzt($), 'fertig')
       }

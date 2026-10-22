@@ -6,6 +6,8 @@ Zwei Mods für Claude Code (Windows). Jeder läuft für sich allein; zusammen te
 
 Sobald Claude fertig ist, kommt ein kurzer Ton und eine winkende Pixel-Krabbe unten rechts. Bei Rückfragen gibt es eine eigene Variante, die alle 5 Minuten wiederkommt, bis du antwortest.
 
+Wartet Claude nur auf Hintergrund-Agenten (und macht danach von selbst weiter), bleibt die Krabbe still und kommt erst, wenn Claude wirklich fertig ist. Hintergrund-Shells zählen dabei nicht mit, weil sie ewig laufen können (z. B. ein Dev-Server): Wartet Claude auf einen Build im Hintergrund, kommt die Krabbe schon in dieser Pause.
+
 Befehl: `/krabbe [frage|an|leise|nur-ton|aus|hier-aus|hier-an]` (`hier-…` gilt nur für den aktuellen Chat).
 
 Über dem Eingabefeld sitzt eine Glocke für den aktuellen Chat (ist auch `skills-sammlung` installiert, sitzt sie in deren Leiste):

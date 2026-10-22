@@ -19,7 +19,13 @@ const engine = (
   chat = { id: 'chat-1' },
   dateien = new Map<string, string>(),
   befehle: string[] = ['krabbe'],
+  agenten: { id: string; status: string }[] = [],
 ) => {
+  on('agent.list', () => ({
+    value: agenten.map(a => ({ ...a, description: 'Prüfung', type: 'general-purpose' })) as never,
+  }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('classic.Stop', () => ({}))
   on('env.get', ($, e) => ({ value: e.name === 'USERPROFILE' ? 'C:\\Users\\T' : undefined }))
   on('fs.exists', ($, e) => ({ value: dateien.has(pfad(e.path)) }))
   on('fs.read', ($, e) => {
@@ -78,6 +84,40 @@ test('bleibt still bei Subagenten und nach einem Abbruch', async ($, on) => {
   await $.turn.complete({ ...FERTIG, isAborted: true, reason: 'aborted' })
 
   expect(starts.length).toBe(0)
+})
+
+test('bleibt still, solange Claude auf Hintergrund-Agenten wartet, und winkt danach', async ($, on) => {
+  const starts: string[][] = []
+  const agenten = [{ id: 'a1', status: 'running' }]
+  engine(on, starts, { id: 'chat-1' }, new Map(), ['krabbe'], agenten)
+  mock.store(on)
+
+  await $.turn.complete({ ...FERTIG, answer: 'Ich warte auf die Prüfung. Passt das?' })
+  expect(starts.length).toBe(0)
+
+  agenten[0] = { id: 'a1', status: 'completed' }
+  await $.turn.complete(FERTIG)
+  expect(starts.length).toBe(1)
+})
+
+test('bleibt still, wenn der Stop-Hook laufende Hintergrundarbeit meldet; Shells zählen nicht', async ($, on) => {
+  const starts: string[][] = []
+  engine(on, starts)
+  mock.store(on)
+  const stop = (typen: string[]) =>
+    $.classic.Stop({
+      stop_hook_active: false,
+      background_tasks: typen.map((type, i) => ({ id: `b${i}`, type, status: 'running', description: '' })),
+    } as never)
+
+  await stop(['subagent'])
+  await $.turn.complete(FERTIG)
+  expect(starts.length).toBe(0)
+
+  await $.turn.start({ text: 'weiter', turnId: 't2' } as never)
+  await stop(['shell', 'monitor'])
+  await $.turn.complete(FERTIG)
+  expect(starts.length).toBe(1)
 })
 
 test('/krabbe schaltet den Modus um und der gilt beim nächsten Fertig', async ($, on) => {
